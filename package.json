@@ -1,0 +1,30 @@
+{
+	"name": "hx-prep",
+	"version": "0.0.0",
+	"description": "keep htmx client state across page refreshes",
+	"keywords": [
+		"htmx",
+		"optimistic-loading",
+		"skeleton",
+		"preload"
+	],
+	"homepage": "https://hx-prep.ajanibilby.com",
+	"bugs": {
+		"url": "https://github.com/AjaniBilby/hx-prep/issues"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/AjaniBilby/hx-prep.git"
+	},
+	"scripts": {
+		"build": "tsc & terser dist/index.js --compress --mangle --output dist/index.min.js"
+	},
+	"license": "MIT",
+	"author": "Ajani Bilby",
+	"type": "commonjs",
+	"main": "dist/index.min.js",
+	"devDependencies": {
+		"terser": "^5.39.0",
+		"typescript": "^5.8.3"
+	}
+}
