@@ -1,26 +1,25 @@
 var hx_prep = function(){
 
 type SwapSpec = { swapStyle: string };
-type Swap = "innerHTML" | "outerHTML";
 
-let api: {
+let htmx: {
+	swap: (target: Element | string, content: string, swapSpec: SwapSpec) => void,
 	getSwapSpecification: (target: Element | string) => SwapSpec,
 	getAttributeValue: (node: Element, attribute: string) => string | null,
 };
 
-const inflight = new Map<XMLHttpRequest, { target: Element, html: string, rules: string | null, swap?: Swap }>();
+const inflight = new Map<XMLHttpRequest, { target: Element, html: string, rules: string | null, swap?: SwapSpec }>();
 const register = new Map<string, { html: string | null, pending?: XMLHttpRequest[] }>();
 
 (globalThis as any).htmx.defineExtension("hx-prep", {
-	init: (config: typeof api) => { api = config; },
+	init: (config: typeof htmx) => { htmx = config; },
 	onEvent: (name: string, event: CustomEvent) => {
 		switch (name) {
 			case "htmx:beforeProcessNode": { // preload skeletons
 				const prep = ResolveSkeleton(event.detail.elt);
 				if (!prep) return;
 
-				LoadSkeleton(prep).catch(console.error);
-
+				PreloadSkeleton(prep);
 				return;
 			}
 			case "htmx:configRequest": {
@@ -29,37 +28,44 @@ const register = new Map<string, { html: string | null, pending?: XMLHttpRequest
 				const prep = ResolveSkeleton(event.detail.elt);
 				if (!prep) return;
 
+				event.detail.headers["HX-Prep"] = prep;
+
+				// Will the skeleton be injected before this request goes out?
+				const loaded = register.has(prep);
+				if (loaded) event.detail.headers["HX-Prep-Status"] = "prepared";
+				else {
+					event.detail.headers["HX-Prep-Status"] = "preparing";
+					PreloadSkeleton(prep);
+				}
+
+				return;
+			}
+			case "htmx:beforeRequest": {
+				const prep = event.detail.requestConfig.headers["HX-Prep"];
+				if (!prep) return;
+
 				const xhr = event.detail.xhr as XMLHttpRequest;
 				const skeleton = GetSkeleton(xhr, prep);
 				if (skeleton === null) return; // confirmed no skeleton
 
 				const target = event.detail.target as Element;
-				const spec = api.getSwapSpecification(target);
+				const spec = htmx.getSwapSpecification(target);
 
 				if (spec.swapStyle !== "innerHTML" && spec.swapStyle !== "outerHTML") return;
-				const swap = spec.swapStyle;
 
 				// Cache information for rollback/delayed skeleton application
-				const rules = api.getAttributeValue(event.detail.elt, "hx-prep-rules");
+				const rules = htmx.getAttributeValue(event.detail.elt, "hx-prep-rules");
 				inflight.set(xhr, {
 					target, html: target.outerHTML, rules,
-					swap: skeleton == undefined ? swap : undefined
+					swap: skeleton == undefined ? spec : undefined
 				});
 
-				event.detail.headers["HX-Prep"] = prep;
-				if (skeleton !== undefined) {
-					if (swap === "innerHTML") target.innerHTML = skeleton;
-					else target.outerHTML = skeleton;
-
-					ApplySkeletonRules(target, rules);
-					event.detail.headers["HX-Prep-Status"] = "prepared";
-				} else {
-					event.detail.headers["HX-Prep-Status"] = "preparing";
-				}
+				// TODO: Bug: When applied prevents URL from changing on boost
+				if (skeleton !== undefined) ApplySkeleton(target, spec, skeleton, rules);
 
 				return;
 			}
-			case "htmx:beforeSwap": {
+			case "htmx:afterRequest": {
 				const xhr = event.detail.xhr as XMLHttpRequest;
 
 				const prev = inflight.get(event.detail.xhr);
@@ -68,7 +74,10 @@ const register = new Map<string, { html: string | null, pending?: XMLHttpRequest
 				inflight.delete(xhr);
 
 				if (!prev.swap && event.detail.target != prev.target) {
-					prev.target.outerHTML = prev.html;
+					console.info(`hx-prep: restore`, event.detail);
+
+					htmx.swap(prev.target, prev.html, { swapStyle: "outerHTML" });
+
 					prev.target.classList.add("htmx-settling");
 					event.detail.target = prev.target;
 				}
@@ -82,7 +91,7 @@ const register = new Map<string, { html: string | null, pending?: XMLHttpRequest
 
 
 function ResolveSkeleton(elt: Element) {
-	const prep = api.getAttributeValue(elt, "hx-prep");
+	const prep = htmx.getAttributeValue(elt, "hx-prep");
 	if (!prep) return null;
 
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -105,50 +114,15 @@ function GetSkeleton (ctx: XMLHttpRequest, url: string) {
 	LoadSkeleton(url).catch(console.error);
 	return undefined;
 }
+function ApplySkeleton(elt: Element, swap: SwapSpec, skeleton: string, rules: string | null) {
+	// direct swap override
+	// if (swap.swapStyle === "innerHTML") elt.innerHTML = skeleton;
+	// else elt.outerHTML = skeleton;
 
-async function LoadSkeleton (url: string) {
-	if (register.has(url)) return;
-	register.set(url, { html: null, pending: [] });
+	// htmx swap
+	if (swap.swapStyle === "innerHTML") htmx.swap(elt, skeleton, { swapStyle: "innerHTML" });
+	else htmx.swap(elt, skeleton, { swapStyle: "outerHTML" });
 
-	try {
-		const req = await fetch(url);
-		if (!req.ok) throw new Error(await req.text());
-		const html = await req.text();
-
-		const cache = register.get(url);
-		if (!cache) return register.set(url, { html, pending: undefined });
-
-		cache.html = html;
-
-		if (cache.pending) for (const xhr of cache.pending) {
-			const pending = inflight.get(xhr);
-			if (!pending || !pending.swap) continue;
-
-			const swap = pending.swap;
-			pending.swap = undefined;
-
-			if (swap === "innerHTML") pending.target.innerHTML = html;
-			else pending.target.outerHTML = html;
-
-			ApplySkeletonRules(pending.target, pending.rules);
-		}
-
-	} catch (e) {
-		console.error(url, e);
-
-		const cache = register.get(url);
-		if (cache) {
-			cache.pending = undefined;
-			cache.html = null;
-			return;
-		}
-
-		register.set(url, { html: null, pending: undefined });
-		return;
-	}
-}
-
-function ApplySkeletonRules(elt: Element, rules: string | null) {
 	elt.classList.add("hx-prep");
 
 	try {
@@ -188,5 +162,55 @@ function ParseRule(rule: string) {
 
 	return { slot: target[0], prop: target.slice(1).reverse(), value };
 }
+
+
+function PreloadSkeleton (url: string) { LoadSkeleton(url).catch(console.error); }
+async function LoadSkeleton (url: string) {
+	if (register.has(url)) return;
+	register.set(url, { html: null, pending: [] });
+
+	console.info(`hx-prep: preloading skeleton ${url}`);
+
+	try {
+		const req = await fetch(url);
+		if (!req.ok) throw new Error(await req.text());
+		const html = await req.text();
+
+		const cache = register.get(url);
+		if (!cache) return register.set(url, { html, pending: undefined });
+
+		cache.html = html;
+
+		if (cache.pending) {
+			console.info(`hx-prep: loaded skeleton ${url}, applying to inflight ${cache.pending.length}`);
+
+			for (const xhr of cache.pending) {
+				const pending = inflight.get(xhr);
+				if (!pending || !pending.swap) continue;
+
+				ApplySkeleton(pending.target, pending.swap, html, pending.rules);
+				pending.swap = undefined;
+			}
+		} else {
+			console.info(`hx-prep: loaded skeleton ${url}`);
+		}
+
+
+
+	} catch (e) {
+		console.error(url, e);
+
+		const cache = register.get(url);
+		if (cache) {
+			cache.pending = undefined;
+			cache.html = null;
+			return;
+		}
+
+		register.set(url, { html: null, pending: undefined });
+		return;
+	}
+}
+
 
 }()
