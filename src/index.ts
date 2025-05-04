@@ -48,10 +48,10 @@ const register = new Map<string, { html: string | null, pending?: XMLHttpRequest
 				const skeleton = GetSkeleton(xhr, prep);
 				if (skeleton === null) return; // confirmed no skeleton
 
-				const target = event.detail.target as Element;
-				const spec = htmx.getSwapSpecification(target);
-
+				const spec = htmx.getSwapSpecification(event.detail.elt as Element);
 				if (spec.swapStyle !== "innerHTML" && spec.swapStyle !== "outerHTML") return;
+
+				const target: Element = event.detail.target; // the target the swap is applied to
 
 				// Cache information for rollback/delayed skeleton application
 				const rules = htmx.getAttributeValue(event.detail.elt, "hx-prep-rules");
