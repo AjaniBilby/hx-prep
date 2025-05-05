@@ -8,7 +8,13 @@ let htmx: {
 	getAttributeValue: (node: Element, attribute: string) => string | null,
 };
 
-const inflight = new Map<XMLHttpRequest, { target: Element, html: string, rules: string | null, swap?: SwapSpec }>();
+type Inflight = {
+	target: Element,      // the element original targeted
+	html: string,         // the original innerHTML
+	rules: string | null, // the rules to apply to the skeleton if JIT
+	swap?: SwapSpec       // the swap to use to apply the skeleton (undefined if applied)
+}
+const inflight = new Map<XMLHttpRequest, Inflight>();
 const register = new Map<string, { html: string | null, pending?: XMLHttpRequest[] }>();
 
 (globalThis as any).htmx.defineExtension("hx-prep", {
@@ -48,45 +54,48 @@ const register = new Map<string, { html: string | null, pending?: XMLHttpRequest
 				const skeleton = GetSkeleton(xhr, prep);
 				if (skeleton === null) return; // confirmed no skeleton
 
-				const spec = htmx.getSwapSpecification(event.detail.elt as Element);
-				if (spec.swapStyle !== "innerHTML" && spec.swapStyle !== "outerHTML") return;
-
-				const target: Element = event.detail.target; // the target the swap is applied to
+				const swap = htmx.getSwapSpecification(event.detail.elt as Element);
+				if (swap.swapStyle !== "innerHTML" && swap.swapStyle !== "outerHTML") return;
 
 				// Cache information for rollback/delayed skeleton application
+				const target: Element = event.detail.target;
 				const rules = htmx.getAttributeValue(event.detail.elt, "hx-prep-rules");
-				inflight.set(xhr, {
-					target, html: target.outerHTML, rules,
-					swap: skeleton == undefined ? spec : undefined
-				});
+				const entry: Inflight = { target, html: target.outerHTML, rules, swap };
+				inflight.set(xhr, entry);
 
 				// TODO: Bug: When applied prevents URL from changing on boost
-				if (skeleton !== undefined) ApplySkeleton(target, spec, skeleton, rules);
+				if (skeleton !== undefined) ApplySkeleton(entry, skeleton);
 
+				return;
+			}
+			case "htmx:beforeHistorySave": {
+				for (const [,prev] of inflight) RollbackSkeleton(prev);
 				return;
 			}
 			case "htmx:afterRequest": {
 				const xhr = event.detail.xhr as XMLHttpRequest;
 
+				// restore original
 				const prev = inflight.get(event.detail.xhr);
 				if (!prev) return;
-
 				inflight.delete(xhr);
 
-				if (!prev.swap && event.detail.target != prev.target) {
-					console.info(`hx-prep: restore`, event.detail);
-
-					htmx.swap(prev.target, prev.html, { swapStyle: "outerHTML" });
-
-					prev.target.classList.add("htmx-settling");
-					event.detail.target = prev.target;
-				}
+				event.detail.target = RollbackSkeleton(prev) || event.detail.target;
 
 				return;
 			}
 		}
 	}
 });
+
+
+function RollbackSkeleton(prev: Inflight) {
+	if (prev.swap) return null; // it was never applied in the first place
+
+	console.info(`hx-prep: restore`, prev.target);
+	htmx.swap(prev.target, prev.html, { swapStyle: "outerHTML" });
+	return prev.target;
+}
 
 
 
@@ -114,27 +123,28 @@ function GetSkeleton (ctx: XMLHttpRequest, url: string) {
 	LoadSkeleton(url).catch(console.error);
 	return undefined;
 }
-function ApplySkeleton(elt: Element, swap: SwapSpec, skeleton: string, rules: string | null) {
-	// direct swap override
-	// if (swap.swapStyle === "innerHTML") elt.innerHTML = skeleton;
-	// else elt.outerHTML = skeleton;
-
-	// htmx swap
-	if (swap.swapStyle === "innerHTML") htmx.swap(elt, skeleton, { swapStyle: "innerHTML" });
-	else htmx.swap(elt, skeleton, { swapStyle: "outerHTML" });
-
-	elt.classList.add("hx-prep");
+function ApplySkeleton(entry: Inflight, skeleton: string) {
+	if (!entry.swap) return; // already applied
 
 	try {
-		if (!rules) return;
-		const lines = rules.split(";");
+		console.info(`hx-prep: applying skeleton to`, entry);
+
+		// htmx swap
+		if (entry.swap.swapStyle === "innerHTML") htmx.swap(entry.target, skeleton, { swapStyle: "innerHTML" });
+		else htmx.swap(entry.target, skeleton, { swapStyle: "outerHTML" });
+
+		entry.target.classList.add("hx-prep");
+		entry.swap = undefined; // mark applied
+
+		if (!entry.rules) return;
+		const lines = entry.rules.split(";");
 
 		for (const line of lines) {
 			const rule = ParseRule(line);
 			if (!rule) continue;
 
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
-			let target = elt.querySelector(`[hx-prep-slot="${rule.slot}"],[data-hx-prep-slot="${rule.slot}"]`) as any;
+			let target = entry.target.querySelector(`[hx-prep-slot="${rule.slot}"],[data-hx-prep-slot="${rule.slot}"]`) as any;
 
 			while (rule.prop.length > 1) {
 				if (!target) break;
@@ -181,15 +191,14 @@ async function LoadSkeleton (url: string) {
 
 		cache.html = html;
 
-		if (cache.pending) {
+		if (cache.pending && cache.pending.length > 0) {
 			console.info(`hx-prep: loaded skeleton ${url}, applying to inflight ${cache.pending.length}`);
 
 			for (const xhr of cache.pending) {
 				const pending = inflight.get(xhr);
-				if (!pending || !pending.swap) continue;
+				if (!pending) continue;
 
-				ApplySkeleton(pending.target, pending.swap, html, pending.rules);
-				pending.swap = undefined;
+				ApplySkeleton(pending, html);
 			}
 		} else {
 			console.info(`hx-prep: loaded skeleton ${url}`);
