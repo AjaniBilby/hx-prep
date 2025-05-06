@@ -13,6 +13,7 @@ type Inflight = {
 	html: string,         // the original innerHTML
 	rules: string | null, // the rules to apply to the skeleton if JIT
 	swap?: SwapSpec       // the swap to use to apply the skeleton (undefined if applied)
+	htmxData?: any
 }
 const inflight = new Map<XMLHttpRequest, Inflight>();
 const register = new Map<string, { html: string | null, pending?: XMLHttpRequest[] }>();
@@ -60,7 +61,8 @@ const register = new Map<string, { html: string | null, pending?: XMLHttpRequest
 				// Cache information for rollback/delayed skeleton application
 				const target: Element = event.detail.target;
 				const rules = htmx.getAttributeValue(event.detail.elt, "hx-prep-rules");
-				const entry: Inflight = { target, html: target.outerHTML, rules, swap };
+				const htmxData = { ...event.detail.elt['htmx-internal-data'] }; // shallow copy to prevent the htmx unmount changes
+				const entry: Inflight = { target, html: target.outerHTML, rules, swap, htmxData };
 				inflight.set(xhr, entry);
 
 				// TODO: Bug: When applied prevents URL from changing on boost
@@ -72,12 +74,13 @@ const register = new Map<string, { html: string | null, pending?: XMLHttpRequest
 				for (const [,prev] of inflight) RollbackSkeleton(prev);
 				return;
 			}
-			case "htmx:afterRequest": {
+			case "htmx:beforeSwap": {
 				const xhr = event.detail.xhr as XMLHttpRequest;
 
 				// restore original
 				const prev = inflight.get(event.detail.xhr);
 				if (!prev) return;
+				event.detail.elt['htmx-internal-data'] = prev.htmxData;
 				inflight.delete(xhr);
 
 				event.detail.target = RollbackSkeleton(prev) || event.detail.target;
