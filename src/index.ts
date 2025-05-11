@@ -60,7 +60,7 @@ let state = 0;
 				}
 
 				{ // insert the skeleton
-					const rules = binding.getAttributeValue(source, "hx-prep-rules");
+					const rules = binding.getAttributeValue(source, "hx-prep-rule");
 					const skeleton = document.createElement("div");
 					skeleton.innerHTML = html;
 					skeleton.className = "hx-prep-skeleton";

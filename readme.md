@@ -1,4 +1,12 @@
-> **THIS IS A WORK IN PROGRESS AND NOT READY FOR PRODUCTION USE**
+Enable loading skeletons in your htmx project as easy as:
+
+```html
+<a href="/case/1" hx-prep="/skeleton" hx-prep-rule='id.innerText = "1"'>Case 1</a>
+```
+
+![banner](/images/banner.gif)
+
+---
 
 ## Getting Started
 
@@ -7,7 +15,7 @@ Import the library in your client side.
 ### CDN
 
 ```html
-<script src="https://unpkg.com/hx-prep@0.0.1"></script>
+<script src="https://unpkg.com/hx-prep@1.0.0"></script>
 ```
 
 ### Bundle
@@ -39,7 +47,7 @@ You must include these styles in your global style sheet for correct rendering d
 .hx-prep, .hx-prep-skeleton, .hx-prep-origin { display: contents }
 .hx-prep:has(.hx-prep-skeleton) .hx-prep-origin { display: none; }
 /* OR */
-@import url("https://unpkg.com/hx-prep@0.0.1/style.css");
+@import url("https://unpkg.com/hx-prep@1.0.0/style.css");
 ```
 
 These classes ensure that the original data is still visible when the skeleton is removed for history storing.
@@ -58,9 +66,14 @@ All html attributes can have the `data-` prefix if required by your framework.
 
 ### `hx-prep`
 
-The url for the skeleton that can be used for any get requests from this element.
+The url for the skeleton that can be used for any requests from this element.
 
-### `hx-prep-rules`
+`hx-prep` will currently override all `htmx` request for an element with a defined `hx-prep` attributes.
+This includes form submissions and post request among others.
+
+To customize a skeleton on a per-element/page basis, we recommend using [`hx-prep-rule`s](#hx-prep-rule) to customize them on the fly rather than having to load multiple different skeletons a head of time.
+
+### `hx-prep-rule`
 
 Replacement rules that should be applied to the skeleton when inserted to make the skeleton unique to the element triggering it.
 
@@ -72,13 +85,23 @@ Each rule must be separated by a `;` and any whitespace detectable by `.trim()` 
 <a
   href="/slow-page"
   hx-prep="/skeleton"
-  hx-prep-rules='title.innerHTML = "Slow Page!"; title.style.color = "blue"'
+  hx-prep-rule='title.innerText = "Slow Page!"; title.style.color = "blue"'
 >link</a>
 ```
 
 ### `hx-prep-slot`
 
 Instead of using a html id, or query selector to access an element in `hx-prep-rule`, we define our own attribute to allow for extra safety and precision when multiple skeletons may be present on a single page.
+
+Skeleton
+```html
+<div hx-prep-slot="body"></div>
+```
+
+Rule to alter inner text:
+```html
+<a hx-prep-rule='body.innerText = "hello world!"'>
+```
 
 ---
 
