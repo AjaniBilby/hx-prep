@@ -7,7 +7,7 @@ Import the library in your client side.
 ### CDN
 
 ```html
-<script src="https://unpkg.com/hx-prep@1.0.4"></script>
+<script src="https://unpkg.com/hx-prep@0.0.1"></script>
 ```
 
 ### Bundle
@@ -31,7 +31,18 @@ window.htmx = htmx; // to support hx-drag
 export default htmx;
 ```
 
-## Enable
+### CSS Styling
+
+You must include these styles in your global style sheet for correct rendering during load failure after skeleton insertion, and ensuring you don't corrupt your htmx history logs.
+```css
+.hx-prep { cursor: progress; }
+.hx-prep, .hx-prep-skeleton, .hx-prep-origin { display: contents }
+.hx-prep:has(.hx-prep-skeleton) .hx-prep-origin { display: none; }
+```
+
+These classes ensure that the original data is still visible when the skeleton is removed for history storing.
+
+### Enable
 
 ```html
 <body hx-ext="hx-prep">...</body>

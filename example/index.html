@@ -1,0 +1,64 @@
+<html>
+	<head>
+		<script src="https://unpkg.com/htmx.org@2.0.4" crossOrigin="anonymous"></script>
+		<script src="https://unpkg.com/hx-prep@0.0.1"  crossOrigin="anonymous"></script>
+		<link href="../style.css" rel="stylesheet"></link>
+		<link href="./style.css" rel="stylesheet"></link>
+		<title>Example</title>
+
+		<style>
+			.box {
+				border: 1px solid black;
+				padding: 1em;
+				margin-block: 1em;
+			}
+			.link { cursor: pointer; }
+		</style>
+	</head>
+	<body hx-ext="hx-prep" hx-boost="true">
+		<h1>Examples</h1>
+
+		<quote>Once you've loaded this page, please use your browsers dev tools to limit the network speed and disable caching</quote>
+
+		<div class="box">
+			<h3 style="margin-top: 0;">Boosting</h3>
+			<ol>
+				<li>
+					<a href="./article/a" hx-prep="./article/skeleton" hx-prep-rules='title.innerHTML = "Article A"'>Article A</a>
+				</li>
+				<li>
+					<a href="./article/b" hx-prep="./article/skeleton" hx-prep-rules='title.innerHTML = "Article B"'>Article B</a>
+				</li>
+				<li>
+					<a href="./article/c" hx-prep="./article/skeleton" hx-prep-rules='title.innerHTML = "Article C"'>Article C</a>
+				</li>
+			</ol>
+		</div>
+
+		<div class="box">
+			<h3 style="margin-top: 0;">Targeted</h3>
+
+			<div style="display: flex; gap: 10px">
+				<div style="display: flex; flex-direction: column;" hx-target="#result-window" hx-swap="innerHTML">
+					<a class="link" hx-get="./card/a" hx-prep="./card/skeleton" hx-prep-rules='id.innerHTML = "1"'>Card 1</a>
+					<a class="link" hx-get="./card/b" hx-prep="./card/skeleton" hx-prep-rules='id.innerHTML = "2"'>Card 2</a>
+					<a class="link" hx-get="./card/c" hx-prep="./card/skeleton" hx-prep-rules='id.innerHTML = "3"'>Card 3</a>
+				</div>
+				<div id="result-window" className="card" style="padding: 10px"></div>
+			</div>
+		</div>
+
+		<div class="box">
+			<h3 style="margin-top: 0;">Queue</h3>
+
+			<div style="display: flex; gap: 10px">
+				<div style="display: flex; flex-direction: column;" hx-target="#result-queue" hx-swap="afterbegin">
+					<a class="link" hx-get="./card/a" hx-prep="./card/skeleton" hx-prep-rules='id.innerHTML = "1"'>Card 1</a>
+					<a class="link" hx-get="./card/b" hx-prep="./card/skeleton" hx-prep-rules='id.innerHTML = "2"'>Card 2</a>
+					<a class="link" hx-get="./card/c" hx-prep="./card/skeleton" hx-prep-rules='id.innerHTML = "3"'>Card 3</a>
+				</div>
+				<div id="result-queue" className="card" style="padding: 10px"></div>
+			</div>
+		</div>
+	</body>
+</html>

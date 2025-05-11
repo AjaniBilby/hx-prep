@@ -1,0 +1,13 @@
+.skeleton {
+	height: 1em;
+	width: 100%;
+
+	background-color: grey;
+	border-radius: 5px;
+
+	animation: pulse 2s cubic-bezier(.4,0,.6,1) infinite;
+}
+
+@keyframes pulse {
+	50% { opacity: 50%; }
+}

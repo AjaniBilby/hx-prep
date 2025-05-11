@@ -1,0 +1,3 @@
+.hx-prep { cursor: progress; }
+.hx-prep, .hx-prep-skeleton, .hx-prep-origin { display: contents }
+.hx-prep:has(.hx-prep-skeleton) .hx-prep-origin { display: none; }
