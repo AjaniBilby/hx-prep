@@ -38,6 +38,8 @@ You must include these styles in your global style sheet for correct rendering d
 .hx-prep { cursor: progress; }
 .hx-prep, .hx-prep-skeleton, .hx-prep-origin { display: contents }
 .hx-prep:has(.hx-prep-skeleton) .hx-prep-origin { display: none; }
+/* OR */
+@import url("https://unpkg.com/hx-prep@0.0.1/style.css");
 ```
 
 These classes ensure that the original data is still visible when the skeleton is removed for history storing.
